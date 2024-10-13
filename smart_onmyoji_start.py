@@ -13,6 +13,8 @@ from ctypes import windll
 from os.path import abspath, dirname
 from time import sleep
 import urllib.request
+from typing import List, Tuple
+import logging
 
 import PyQt5.QtCore
 from PyQt5.QtGui import QIcon
@@ -24,33 +26,21 @@ from modules.ui import Ui_MainWindow
 
 now_tag = "v0.43"
 
+# 在类定义前添加
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class MainWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self, ui_info, target_file_name_list):
-        QMainWindow.__init__(self)
-        Ui_MainWindow.__init__(self)
-        super(MainWindow).__init__()
+    def __init__(self, ui_info: List, target_file_name_list: List[Tuple[str, str]]):
+        super().__init__()
         self.setupUi(self)  # 继承UI类，下面进行信号与槽的绑定和修改
 
-        # 使用配置文件参数
-        self.connect_mod_value = ui_info[0]
-        self.target_path_mode_value = ui_info[1]
-        self.handle_title_value = ui_info[2]
-        self.click_deviation_value = ui_info[3]
-        self.interval_seconds_value = ui_info[4]
-        self.loop_min_value = ui_info[5]
-        self.img_compress_val_value = ui_info[6]
-        self.match_method_value = ui_info[7]
-        self.run_mode_value = ui_info[8]
-        self.custom_target_path_value = ui_info[9]
-        self.process_num_value = ui_info[10]
-        self.handle_num_value = ui_info[11]
-        self.if_end_value = ui_info[12]
-        self.debug_status_value = ui_info[13]
-        self.set_priority_status_value = ui_info[14]
-        self.interval_seconds_value_max = ui_info[15]
-        self.screen_scale_rate_value = ui_info[16]
-        self.times_mode = ui_info[17]
+        # 使用字典存储UI元素,便于后续访问
+        self.ui_elements = {}
+        self._init_ui_elements(ui_info)
+
+        # 使用logging替代print
+        logging.info("初始化完成")
 
         # 控制台消息捕获并输出到运行日志
         sys.stdout = EmitStr(text_writ=self.output_write)  # 输出结果重定向
@@ -93,31 +83,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                              )
 
         # 加载config.ini文件中的默认参数
-        self.click_deviation.setValue(self.click_deviation_value)  # 设置默认偏移量
-        self.image_compression.setSliderPosition(int(self.img_compress_val_value * 100))  # 压缩截图默认值
-        self.set_priority.setChecked(self.set_priority_status_value)
-        self.debug.setChecked(self.debug_status_value)
-        self.show_handle_title.setText(str(self.handle_title_value))
-        self.show_handle_num.setText(str(self.handle_num_value))
-        self.select_target_path_mode_combobox.setCurrentText(self.target_path_mode_value)
-        if self.target_path_mode_value == '自定义':
+        self.click_deviation.setValue(self.ui_elements["click_deviation"])  # 设置默认偏移量
+        self.image_compression.setSliderPosition(int(self.ui_elements["img_compress_val"] * 100))  # 压缩截图默认值
+        self.set_priority.setChecked(self.ui_elements["set_priority_status"])
+        self.debug.setChecked(self.ui_elements["debug_status"])
+        self.show_handle_title.setText(str(self.ui_elements["handle_title"]))
+        self.show_handle_num.setText(str(self.ui_elements["handle_num"]))
+        self.select_target_path_mode_combobox.setCurrentText(self.ui_elements["target_path_mode"])
+        if self.ui_elements["target_path_mode"] == '自定义':
             self.select_targetpic_path_btn.show()
         else:
             self.select_targetpic_path_btn.hide()
-        self.interval_seconds.setValue(float(self.interval_seconds_value))
-        self.interval_seconds_max.setValue(float(self.interval_seconds_value_max))
-        self.loop_min.setValue(float(self.loop_min_value))
-        self.show_target_path.setText(self.custom_target_path_value)
-        self.screen_rate.setValue(float(self.screen_scale_rate_value))
-        if self.run_mode_value == '正常-可后台':
+        self.interval_seconds.setValue(float(self.ui_elements["interval_seconds"]))
+        self.interval_seconds_max.setValue(float(self.ui_elements["interval_seconds_max"]))
+        self.loop_min.setValue(float(self.ui_elements["loop_min"]))
+        self.show_target_path.setText(self.ui_elements["custom_target_path"])
+        self.screen_rate.setValue(float(self.ui_elements["screen_scale_rate"]))
+        if self.ui_elements["run_mode"] == '正常-可后台':
             self.runmod_nomal.setChecked(True)
         else:
             self.runmod_compatibility.setChecked(True)
-        if self.match_method_value == '模板匹配':
+        if self.ui_elements["match_method"] == '模板匹配':
             self.template_matching.setChecked(True)
         else:
             self.sift_matching.setChecked(True)
-        if self.process_num_value == '单开':
+        if self.ui_elements["process_num"] == '单开':
             self.process_num_one.setChecked(True)
             self.show_handle_title.show()
             self.show_handle_num.hide()
@@ -125,7 +115,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.process_num_more.setChecked(True)
             self.show_handle_num.show()
             self.show_handle_title.hide()
-        if self.connect_mod_value == 'Windows程序窗体':
+        if self.ui_elements["connect_mod"] == 'Windows程序窗体':
             self.rd_btn_windows_mod.setChecked(True)
         else:
             self.rd_btn_android_adb.setChecked(True)
@@ -135,7 +125,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.process_num_one.setEnabled(False)
             self.process_num_more.setEnabled(False)
 
-        if self.times_mode == "按分钟计算":
+        if self.ui_elements["times_mode"] == "按分钟计算":
             self.run_by_min.setChecked(True)
         else:
             self.run_by_rounds.setChecked(True)
@@ -156,6 +146,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.select_targetpic_path_btn.clicked.connect(self.__on_click_btn_select_custom_path)
         self.config_set_btn.clicked.connect(self.__on_click_btn_config_set)
         self.targetpic_path_btn.clicked.connect(self.__on_click_btn_target_pic_folder_open)
+
+    def _init_ui_elements(self, ui_info: List):
+        # 将UI元素初始化逻辑抽取为单独的方法
+        element_names = [
+            "connect_mod", "target_path_mode", "handle_title", "click_deviation",
+            "interval_seconds", "loop_min", "img_compress_val", "match_method",
+            "run_mode", "custom_target_path", "process_num", "handle_num",
+            "if_end", "debug_status", "set_priority_status", "interval_seconds_max",
+            "screen_scale_rate", "times_mode"
+        ]
+        for name, value in zip(element_names, ui_info):
+            self.ui_elements[name] = value
 
     # 控制台消息重定向槽函数，控制台字符追加到 run_log中
     def output_write(self, text):
