@@ -9,6 +9,8 @@ from gc import collect
 from os.path import abspath, dirname
 from re import search
 from time import sleep, localtime, strftime
+from typing import Tuple, List, Optional
+import logging
 
 from win32gui import GetWindowText
 
@@ -36,20 +38,28 @@ def time_transform(seconds):
 
 class StartMatch:
 
-    def __init__(self, gui_info):
-        super(StartMatch, self).__init__()
-        self.connect_mod, self.target_modname, self.hwd_title, self.click_deviation, self.interval_seconds, self.loop_min, self.compress_val, self.match_method, self.scr_and_click_method, self.custom_target_path, self.process_num, self.handle_num = gui_info
-        rc = ReadConfigFile()
-        self.other_setting = rc.read_config_other_setting()
+    def __init__(self, gui_info: List):
+        self.config = self._load_config(gui_info)
+        self.rc = ReadConfigFile()
+        self.other_setting = self.rc.read_config_other_setting()
 
-    def set_init(self, set_priority_status):
+    def _load_config(self, gui_info: List) -> dict:
+        # 将配置加载逻辑抽取为单独的方法
+        config_keys = [
+            "connect_mod", "target_modname", "hwd_title", "click_deviation",
+            "interval_seconds", "loop_min", "compress_val", "match_method",
+            "scr_and_click_method", "custom_target_path", "process_num", "handle_num"
+        ]
+        return dict(zip(config_keys, gui_info))
+
+    def set_init(self, set_priority_status: bool) -> Optional[Tuple]:
         """
         获取待匹配的目标图片信息、计算循环次数、时间、截图方法
         :return: 循环次数、截图方法、图片信息、每次循环大约需要执行的时间
         """
         # 参数初始化
-        target_modname = self.target_modname
-        custom_target_path = self.custom_target_path
+        target_modname = self.config["target_modname"]
+        custom_target_path = self.config["custom_target_path"]
         # 获取待检测目标图片信息
         print('<br>目标图片读取中……')
         target_info = GetTargetPicInfo(target_modname, custom_target_path,
@@ -63,7 +73,7 @@ class StartMatch:
         print("<br>--------------------------------------------")
 
         # 程序初始化时，如果设置的wifi或远程连接，先使用adb connect 连接设备
-        if self.connect_mod != 'Windows程序窗体':
+        if self.config["connect_mod"] != 'Windows程序窗体':
             HandleSet.deal_cmd(abspath(dirname(__file__)) + r'\adb.exe kill-server')
             print("<br>正在尝试连接！如果失败请使用以下cmd命令重置adb，或使用USB连接手机后重试")
             print("<br>--------------------------------------------")
@@ -99,20 +109,20 @@ class StartMatch:
                     print(f"<br>连接出现异常，或设备无响应！{e}")
                     return None
 
-        elif self.connect_mod == 'Windows程序窗体':
-            if search("模拟器", self.hwd_title) and not search("雷电模拟器", self.hwd_title):
+        elif self.config["connect_mod"] == 'Windows程序窗体':
+            if search("模拟器", self.config["hwd_title"]) and not search("雷电模拟器", self.config["hwd_title"]):
                 HandleSet.deal_cmd(abspath(dirname(__file__)) + r'\adb.exe kill-server')
                 print("<br>正在尝试连接模拟器！如果失败请使用以下cmd命令重置adb")
                 print(rf"<br>{abspath(dirname(__file__))}\adb.exe kill-server")
                 print(rf"<br>{abspath(dirname(__file__))}\adb.exe devices")
                 sleep(2)
-                if search("MuMu模拟器", self.hwd_title):
+                if search("MuMu模拟器", self.config["hwd_title"]):
                     HandleSet.deal_cmd(abspath(dirname(__file__)) + rf'\adb.exe connect 127.0.0.1:7555')
-                elif search("夜神模拟器", self.hwd_title):
+                elif search("夜神模拟器", self.config["hwd_title"]):
                     HandleSet.deal_cmd(abspath(dirname(__file__)) + rf'\adb.exe connect 127.0.0.1:62001')
-                elif search("逍遥模拟器", self.hwd_title):
+                elif search("逍遥模拟器", self.config["hwd_title"]):
                     HandleSet.deal_cmd(abspath(dirname(__file__)) + rf'\adb.exe connect 127.0.0.1:21503')
-                elif search("腾讯手游助手", self.hwd_title):
+                elif search("腾讯手游助手", self.config["hwd_title"]):
                     HandleSet.deal_cmd(abspath(dirname(__file__)) + rf'\adb.exe connect 127.0.0.1:6555')
 
                 adb_device_connect_status, device_id = HandleSet.adb_device_status()
@@ -122,24 +132,24 @@ class StartMatch:
 
         # 设置游戏进程优先级，避免闪退（部分电脑可能有bug，会报错）
         if set_priority_status:
-            if self.process_num == '多开' and self.connect_mod == 'Windows程序窗体':
-                handle_num_list = str(self.handle_num).split(",")
+            if self.config["process_num"] == '多开' and self.config["connect_mod"] == 'Windows程序窗体':
+                handle_num_list = str(self.config["handle_num"]).split(",")
                 if handle_num_list[0] == '' or handle_num_list[0] == '0' or handle_num_list[0] is None:
                     print("<br>【运行异常：请选择待匹配目标窗口！】")
                     return None
                 for handle_num_loop in range(len(handle_num_list)):
                     handle_num = int(handle_num_list[handle_num_loop])
                     handle_set = HandleSet('', handle_num)
-                    if not handle_set.handle_is_active(self.process_num):
+                    if not handle_set.handle_is_active(self.config["process_num"]):
                         print("<br>【运行异常：未选择待匹配目标程序，或程序异常终止！】")
                         return None
                     handle_set.set_priority(int(self.other_setting[6]))
-            elif self.process_num == '单开' and self.connect_mod == 'Windows程序窗体':
-                if self.hwd_title == '' or self.hwd_title is None:
+            elif self.config["process_num"] == '单开' and self.config["connect_mod"] == 'Windows程序窗体':
+                if self.config["hwd_title"] == '' or self.config["hwd_title"] is None:
                     print("<br>【运行异常：请选择待匹配目标窗口！】")
                     return None
-                handle_set = HandleSet(self.hwd_title, 0)
-                if not handle_set.handle_is_active(self.process_num):
+                handle_set = HandleSet(self.config["hwd_title"], 0)
+                if not handle_set.handle_is_active(self.config["process_num"]):
                     print("<br>【运行异常：未选择待匹配目标程序，或程序异常终止！】")
                     return None
                 handle_set.set_priority(int(self.other_setting[6]))
@@ -147,7 +157,7 @@ class StartMatch:
         return target_info
 
     def matching(self, connect_mod, handle_num, scr_and_click_method, screen_method, debug_status, match_method,
-                 compress_val, target_info, click_mod1, click_mod2, run_status, match_status, stop_status, flag_mark):
+                 compress_val, target_info, click_mod1, click_mod2, run_status, match_status, stop_status, flag_mark) -> Tuple:
         """
         核心代码~
         :param connect_mod: 运行方式，windows或安卓
@@ -291,9 +301,9 @@ class StartMatch:
 
                 if connect_mod == 'Windows程序窗体':
 
-                    if search("雷电模拟器", self.hwd_title):
+                    if search("雷电模拟器", self.config["hwd_title"]):
                         # 针对 雷电模拟器，特殊处理
-                        handle_set = HandleSet(self.hwd_title, handle_num)
+                        handle_set = HandleSet(self.config["hwd_title"], handle_num)
                         handle_num = handle_set.get_handle_num
                         doclick = DoClick(pos, click_mod, handle_num)
                         if debug_status:
@@ -309,7 +319,7 @@ class StartMatch:
                             if debug_status:
                                 print(f"<br>兼容模式点击成功! ")
 
-                    elif search("模拟器", self.hwd_title) or search("手游助手", self.hwd_title):
+                    elif search("模拟器", self.config["hwd_title"]) or search("手游助手", self.config["hwd_title"]):
                         # 针对 安卓模拟器 的兼容（使用ADB连接）
                         adb_device_connect_status, device_id = HandleSet.adb_device_status()
                         doclick = DoClick(pos, click_mod, handle_num)
@@ -328,7 +338,7 @@ class StartMatch:
 
                     else:
                         # 针对 windows 程序
-                        handle_set = HandleSet(self.hwd_title, handle_num)
+                        handle_set = HandleSet(self.config["hwd_title"], handle_num)
                         handle_num = handle_set.get_handle_num
                         doclick = DoClick(pos, click_mod, handle_num)
 
@@ -362,25 +372,25 @@ class StartMatch:
         return run_status, match_status, stop_status, target_img_name[target_num], click_pos
 
     def start_match_click(self, i, target_info, debug_status, start_time, end_time, now_time, loop_seconds, click_mod1,
-                          click_mod2, flag_mark):
+                          click_mod2, flag_mark) -> Tuple:
         """不同场景下的匹配方式"""
         match_status = False
         run_status = True
         stop_status = False
         match_target_name = None
         click_pos = []
-        connect_mod = self.connect_mod
-        scr_and_click_method = self.scr_and_click_method
-        match_method = self.match_method
-        compress_val = float(self.compress_val)
-        handle_num_list = str(self.handle_num).split(",")
+        connect_mod = self.config["connect_mod"]
+        scr_and_click_method = self.config["scr_and_click_method"]
+        match_method = self.config["match_method"]
+        compress_val = float(self.config["compress_val"])
+        handle_num_list = str(self.config["handle_num"]).split(",")
 
         progress = format((now_time - start_time) / loop_seconds, '.2%')
         print(f"<br>第 [ {i + 1} ] 次匹配, 当前进度 [ {progress} ] "
               f"<br>开始-结束时间 [ {strftime('%m-%d %H:%M', localtime(start_time))} --- {strftime('%m-%d %H:%M', localtime(end_time))} ]")
 
         # 多开场景下，针对每个窗口遍历：截图、匹配、点击
-        if self.process_num == '多开' and connect_mod == 'Windows程序窗体':
+        if self.config["process_num"] == '多开' and connect_mod == 'Windows程序窗体':
             if handle_num_list[0] == '' or handle_num_list[0] == '0' or handle_num_list[0] is None:
                 print("<br>【运行异常：请选择待匹配目标窗口！】")
                 run_status = False
@@ -390,7 +400,7 @@ class StartMatch:
                 print("<br>--------------------------------------------")
                 print(f"<br>正在匹配 [{GetWindowText(handle_num)}] [{handle_num}]")
                 handle_set = HandleSet('', handle_num)
-                if not handle_set.handle_is_active(self.process_num):
+                if not handle_set.handle_is_active(self.config["process_num"]):
                     print("<br>【运行异常：未选择待匹配目标程序，或程序异常终止！】")
                     run_status = False
                     return run_status, match_status
@@ -403,13 +413,13 @@ class StartMatch:
                 run_status, match_status, stop_status, match_target_name, click_pos = results
 
         # 单开场景下，通过标题找到窗口句柄
-        elif self.process_num == '单开' and connect_mod == 'Windows程序窗体':
-            if self.hwd_title == '' or self.hwd_title is None:
+        elif self.config["process_num"] == '单开' and connect_mod == 'Windows程序窗体':
+            if self.config["hwd_title"] == '' or self.config["hwd_title"] is None:
                 print("<br>【运行异常：请选择待匹配目标窗口！】")
                 run_status = False
                 return run_status, match_status
-            handle_set = HandleSet(self.hwd_title, 0)
-            if not handle_set.handle_is_active(self.process_num):
+            handle_set = HandleSet(self.config["hwd_title"], 0)
+            if not handle_set.handle_is_active(self.config["process_num"]):
                 print("<br>【运行异常：未选择待匹配目标程序，或程序异常终止！】")
                 run_status = False
                 return run_status, match_status
