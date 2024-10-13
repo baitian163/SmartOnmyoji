@@ -12,6 +12,8 @@ from os import system
 from os.path import abspath, dirname
 from random import uniform
 from time import sleep
+from typing import List, Tuple
+import logging
 
 from PyQt5 import QtCore
 from win32con import WM_CLOSE
@@ -56,12 +58,12 @@ class MatchingThread(QtCore.QThread):
 
     # 构造函数，thread初始化创建时，传入UI窗体类，可以在run中直接获取GUI中的参数
     def __init__(self, main_window_ui):
-        super(MatchingThread, self).__init__()
+        super().__init__()
+        self.ui_info = main_window_ui
         self.isPause = False
         self.isCancel = False
         self.cond = QtCore.QWaitCondition()
         self.mutex = QtCore.QMutex()
-        self.ui_info = main_window_ui
 
     # 暂停
     def pause(self):
@@ -102,7 +104,7 @@ class MatchingThread(QtCore.QThread):
             print("<br>已完成！")
         elif if_end == '关闭匹配目标窗体':
             print("<br>已完成，正在退出程序！")
-            if process_num == '多开' and connect_mod == 'Windows程序窗体':
+            if process_num == '多开' and connect_mod == 'Windows���序窗体':
                 handle_num_list = str(handle_num_list).split(",")
                 for handle_num_loop in range(len(handle_num_list)):
                     PostMessage(handle_num_list[handle_num_loop], WM_CLOSE, 0, 0)  # 关闭程序
@@ -175,6 +177,17 @@ class MatchingThread(QtCore.QThread):
 
     # 运行(入口)
     def run(self):
+        """
+        多线程执行，避免界面卡顿，通过线程锁实现暂停、终止的操作，通过信号实现传参到界面
+        """
+        try:
+            self._execute_matching()
+        except Exception as e:
+            logging.error(f"匹配过程发生错误: {e}")
+        finally:
+            self.finished_signal.emit(True)
+
+    def _execute_matching(self):
         """
         多线程执行，避免界面卡顿，通过线程锁实现暂停、终止的操作，通过信号实现传参到界面
         """
@@ -427,7 +440,7 @@ class MatchingThread(QtCore.QThread):
                     ts = uniform(-0.6, 0.6)  # 设置随机延时，防检测
                     remaining_time = time_transform(end_time - now_time)  # 根据时间来计算剩余时间
                     match_once_time = match_end_time - match_start_time  # 执行一次匹配所需的时间
-                    interval_s = random.uniform(interval_seconds[0], interval_seconds[1])  # 匹配时间设定随机值
+                    interval_s = random.uniform(interval_seconds[0], interval_seconds[1])  # 匹配时��设定随机值
                     # print("<br>", interval_s)
                     if match_once_time >= interval_s + ts:
                         sleep_time = 0
@@ -436,7 +449,7 @@ class MatchingThread(QtCore.QThread):
                     if run_times_mode == "按分钟计算":
                         print(f"<br>当前第 [ {rounds} ] 轮，将在 [ {remaining_time} ] 后结束")
                     else:
-                        print(f"<br>当前第 [ {rounds} ] 轮，剩余 [ {run_rounds - rounds} ] 轮")
+                        print(f"<br>��前第 [ {rounds} ] 轮，剩余 [ {run_rounds - rounds} ] 轮")
 
                     print(f"<br>一次匹配需 [ {round(match_once_time, 2)} ] 秒，将在 [ {round(sleep_time, 2)} ] 秒后继续")
                     print(f"<br>脚本已运行：[ {time_transform(match_end_time - start_time)} ]")
