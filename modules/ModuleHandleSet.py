@@ -11,6 +11,8 @@ from re import search
 from os.path import abspath, dirname
 from subprocess import Popen, PIPE
 from time import sleep
+from typing import Tuple, Optional
+import logging
 
 from win32api import OpenProcess
 from win32con import PROCESS_ALL_ACCESS
@@ -22,33 +24,40 @@ from modules.ModuleGetConfig import ReadConfigFile
 
 
 class HandleSet:
-    def __init__(self, handle_title, handle_num):
+    def __init__(self, handle_title: str, handle_num: int):
         super(HandleSet, self).__init__()
         self.handle_pos = None
         self.handle_title = handle_title
         self.handle_num = int(handle_num)
         self.handle_pid = None
-        set_config = ReadConfigFile()  # 读取配置文件
-        self.other_setting = set_config.read_config_other_setting()
+        self.rc = ReadConfigFile()
+        self.other_setting = self.rc.read_config_other_setting()
 
     @property
-    def get_handle_num(self):
+    def get_handle_num(self) -> Optional[int]:
         """通过句柄标题获取句柄编号"""
+        if self.handle_num != 0 or not self.handle_title:
+            return self._get_handle_num_for_multi()
+        return self._get_handle_num_for_single()
+
+    def _get_handle_num_for_multi(self) -> Optional[int]:
+        """多开情况下获取句柄号的逻辑"""
         # 如果编号不为0或者标题为空，说明是设置的多开，此时直接校验编号即可
-        if self.handle_num != 0 or self.handle_title == '':
-            if search("雷电模拟器", self.get_handle_title(self.handle_num)):
-                self.handle_num = FindWindowEx(self.handle_num, None, None, "TheRender")  # 兼容雷电模拟器后台点击
-                return None if self.handle_num == 0 else self.handle_num
-            else:
-                return self.handle_num
+        if search("雷电模拟器", self.get_handle_title(self.handle_num)):
+            self.handle_num = FindWindowEx(self.handle_num, None, None, "TheRender")  # 兼容雷电模拟器后台点击
+            return None if self.handle_num == 0 else self.handle_num
         else:
-            # 其他情况，说明设置的单开，此时需要通过标题名称来获取编号，再对编号进行校验
-            self.handle_num = FindWindow(None, self.handle_title)  # 搜索句柄标题，获取句柄编号
-            if search("雷电模拟器", self.handle_title):
-                self.handle_num = FindWindowEx(self.handle_num, None, None, "TheRender")  # 兼容雷电模拟器后台点击
-                return None if self.handle_num == 0 else self.handle_num
-            else:
-                return None if self.handle_num == 0 else self.handle_num
+            return self.handle_num
+
+    def _get_handle_num_for_single(self) -> Optional[int]:
+        """单开情况下获取句柄号的逻辑"""
+        # 其他情况，说明设置的单开，此时需要通过标题名称来获取编号，再对编号进行校验
+        self.handle_num = FindWindow(None, self.handle_title)  # 搜索句柄标题，获取句柄编号
+        if search("雷电模拟器", self.handle_title):
+            self.handle_num = FindWindowEx(self.handle_num, None, None, "TheRender")  # 兼容雷电模拟器后台点击
+            return None if self.handle_num == 0 else self.handle_num
+        else:
+            return None if self.handle_num == 0 else self.handle_num
 
     @staticmethod
     def get_handle_title(handle_num=None):
